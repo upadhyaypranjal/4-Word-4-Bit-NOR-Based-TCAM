@@ -200,7 +200,7 @@ A ROM testbench was created in Cadence Virtuoso with V<sub>DD</sub> = 1 V. The a
 
 Numerical V<sub>OL</sub> and V<sub>OH</sub> values, power consumption and area were not characterized.
 
-![Transient waveforms](images/transient_waveforms.png)
+![Transient waveforms](images/transient_waveforms.bmp)
 
 *Figure 6. Transient waveforms of the address inputs, word lines and bit lines.*
 
