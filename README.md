@@ -1,230 +1,350 @@
-# Design and Full-Custom Implementation of a 4×4 NMOS Mask ROM Using Cadence Virtuoso (45 nm CMOS Technology)
+# Design and Full-Custom Implementation of a 4-Bit NOR-Type Ternary CAM (TCAM) Using Cadence Virtuoso (45 nm CMOS Technology)
 
 ## 1. Project Overview
 
-This project documents the full-custom, transistor-level design of a 4-word × 4-bit NMOS mask ROM in Cadence Virtuoso using the gpdk045 (45 nm) CMOS technology. The memory was built bottom-up from a CMOS inverter, through a transmission-gate AND gate and a 2-to-4 address decoder, to a static, ratioed NMOS ROM array with PMOS pull-up loads.
+This repository documents the full-custom, transistor-level design of a **4-bit NOR-type Ternary Content-Addressable Memory (TCAM)** in Cadence Virtuoso using the gpdk045 (45 nm) CMOS technology.
 
-The ROM is mask-programmed: the stored data is fixed by the presence or absence of NMOS transistors in the array. It is read-only and cannot be written during operation.
+A TCAM stores three possible states per bit (`0`, `1`, and `X` / don't care) and performs parallel comparisons between a stored word and an input search word, producing a single `MATCH` output.
 
-![4x4 NMOS Mask ROM architecture](images/architecture.png)
+The design is developed hierarchically, progressing from a gate-level reference model to transistor-level memory, comparison, and sensing circuits.
 
-*Figure 1. Architecture: address inputs, 2-to-4 decoder, word lines WL0–WL3, NMOS ROM array, bit lines BL0–BL3, data outputs.*
+### Design Hierarchy
 
-```
-4x4-NMOS-Mask-ROM/
+- **Gate-Level Reference Model:** Functional verification using ideal CMOS logic gates (XOR, AND, OR, NOR-4).
+- **6T SRAM Storage Cell:** A static 6-transistor memory cell used twice per TCAM bit for dual-rail storage (`Q1`, `Q2`).
+- **16T NOR-Type TCAM Cell:** Integration of two 6T SRAM cells with a four-NMOS dynamic comparison network.
+- **4-Bit TCAM Row:** Four TCAM cells connected in parallel, sharing a dynamically precharged match line (`ML`) with a 5 fF load.
+- **Latch-Type Sense Amplifier:** A differential cross-coupled amplifier designed for match-line sensing.
+
+### Repository Structure
+
+4-Bit-TCAM/
+│
 ├── README.md
-├── images/
-│   ├── architecture.png
-│   ├── inverter.png
-│   ├── transmission_gate_and.png
-│   ├── decoder.png
-│   ├── rom_array.png
-│   ├── rom_array_tb.png
-│   └── transient_waveforms.png
-└── .gitignore
-```
+│
+└── images/
+    │
+    ├── architecture.png
+    ├── sense_amp_architecture.png
+    │
+    ├── 1_Gate_Level_Model/
+    │   ├── nor_4bit_schematic.png
+    │   ├── nor-4_waveform.bmp
+    │   ├── tcam_4bit_reference_model.png
+    │   ├── tcam_exact_match.bmp
+    │   ├── tcam_dont-care.bmp
+    │   └── tcam_mismatch.bmp
+    │
+    ├── 2_6T_SRAM/
+    │   ├── sram_6t_schematic.png
+    │   └── sram_6t_waveform.bmp
+    │
+    ├── 3_Sense_Amplifier/
+    │   ├── sense_amp_schematic.png
+    │   └── sense_amp_waveform1.bmp
+    │
+    ├── 4_TCAM_1Bit/
+    │   ├── tcam_1bit_schematic.png
+    │   └── tcam_1bit_waveform.bmp
+    │
+    └── 5_TCAM_4Bit_Row/
+        ├── tcam_row_4x4.png
+        ├── tcam_row_waveform1.bmp
+        ├── tcam_row_waveform2.bmp
+        └── tcam_row_waveform3.bmp
 
 ## 2. Technology and Design Tools
 
-| Item | Detail |
-|---|---|
-| Technology | gpdk045 (45 nm CMOS) |
-| Design entry | Cadence Virtuoso, transistor-level schematics |
-| Simulation | Transient analysis in Cadence Virtuoso |
-| Waveform viewing and measurement | Cadence ViVA |
-| Supply voltage (ROM simulation) | V<sub>DD</sub> = 1 V |
+| Item              | Detail                                      |
+|-------------------|---------------------------------------------|
+| Technology        | gpdk045 (45 nm CMOS)                        |
+| Devices           | g45n1svt (NMOS), g45p1svt (PMOS), L = 45 nm |
+| Design entry      | Cadence Virtuoso Schematic Editor           |
+| Simulation        | Spectre transient analysis (ADE)            |
+| Waveform viewer   | Virtuoso Visualization & Analysis (ViVA)    |
+| Supply            | VDD = 0.9 V                                 |
+| Match-line load   | CML = 5 fF                                  |
 
-## 3. Design Methodology
+## 3. Architecture
 
-The 4×4 NMOS Mask ROM was implemented using a full-custom transistor-level design approach in Cadence Virtuoso with the gpdk045 (45 nm) technology.
+The 4-bit TCAM word consists of four 16T TCAM cells sharing a single precharged match line (ML). A PMOS precharge transistor restores ML to VDD prior to each search evaluation. An explicit capacitor ($C_{ML} = 5\text{ fF}$) models the total parasitic capacitance of the line. The match line connects directly to a latch-type sense amplifier, which senses the ML discharge and outputs a full-swing digital MATCH signal.
 
-The implementation was carried out through the following stages:
+![TCAM Architecture](images/architecture.png)
+*Figure 1. Architecture of the 4-bit NOR-type TCAM word.*
 
-1. **CMOS Inverter Design:** Designed and verified a CMOS inverter through transient simulation. The inverter provides the complemented address signals required by the decoder.
-2. **Transmission-Gate-Based AND Gate:** Designed an AND gate using transmission-gate logic and verified its functional behaviour through simulation.
-3. **2-to-4 Address Decoder:** Integrated two CMOS inverters and four AND gates to construct an active-high 2-to-4 decoder. The decoder generates four word-line signals (WL0–WL3) based on the address inputs (A1, A0).
-4. **NMOS ROM Array Implementation:** Designed a 4-word × 4-bit memory array using six NMOS pull-down transistors. The presence or absence of an NMOS transistor at each word-line and bit-line intersection determines the stored data.
-5. **PMOS Pull-Up Integration:** Connected four always-on PMOS transistors, one to each bit line, to provide the pull-up paths required for static, ratioed ROM operation.
-6. **Transistor Sizing Optimization:** Optimized the NMOS and PMOS transistor dimensions to improve the bit-line logic-LOW voltage and read behaviour.
-7. **Transient Simulation and Timing Analysis:** Simulated the complete ROM in Cadence Virtuoso to verify the stored data across all four addresses. A preliminary address-to-output propagation delay was evaluated using Cadence ViVA.
+## 4. Flow of Implementation
 
-## 4. CMOS Inverter
+1. Gate-level functional reference (XOR-AND mask control + NOR-4).  
+2. 6T SRAM cell design and verification.  
+3. 16T TCAM bit cell (two 6T SRAMs + four compare NMOS).  
+4. 1-bit TCAM cell characterization.  
+5. 4-bit TCAM row with shared match line.  
+6. Latch-type match-line sense amplifier.  
+7. Integration and final verification.
 
-The inverter uses one PMOS and one NMOS with their gates tied to the input and their drains tied to the output. The PMOS source and bulk connect to V<sub>DD</sub>; the NMOS source and bulk connect to ground.
+## 5. Gate-Level Reference Model
 
-| Input | PMOS | NMOS | Output |
+The gate-level reference model establishes the golden functional baseline for the TCAM array. It models the per-bit comparison, don't-care masking, and multi-bit match aggregation using ideal logic gates to verify system functionality prior to full-custom transistor-level design.
+
+### 5.1 Per-Bit Mask Control
+
+Each bit position evaluates the stored data bit ($D_i$), search bit ($S_i$), and mask bit ($M_i$). The per-bit comparison generates an intermediate mismatch signal ($MM_i$):
+
+$$X_i = D_i \oplus S_i, \qquad MM_i = X_i \cdot \overline{M_i}$$
+
+- **$M_i = 0$ (Search Mode):** The bit is actively compared. If $D_i \neq S_i$, $MM_i = 1$ (mismatch).
+- **$M_i = 1$ (Masked Mode):** The bit is ignored (don't care state X), forcing $MM_i = 0$ regardless of $D_i$ and $S_i$.
+
+| $M_i$ | $D_i \oplus S_i$ | $MM_i$ (Mismatch) | Functional State |
 |---|---|---|---|
-| 0 | ON, pulls output up | OFF | 1 |
-| 1 | OFF | ON, pulls output down | 0 |
+| 0 | 0 | 0 | Compared, bits equal (Match) |
+| 0 | 1 | 1 | Compared, bits differ (Mismatch) |
+| 1 | 0 | 0 | Masked (Don't Care) |
+| 1 | 1 | 0 | Masked (Don't Care) |
 
-In each static state one transistor is off, so there is no direct path from V<sub>DD</sub> to ground and the output reaches the supply rails. Static current is limited to leakage. The inverter was verified by transient simulation with a pulsed input; the output is the logical complement of the input. In the decoder, two inverters generate A1̄ and Ā0.
+### 5.2 NOR-4 Word Combiner
 
+In a NOR-type TCAM architecture, a single mismatching bit in a word must drive the overall word output to logic low. To implement this functional behavior at the gate level, a 4-input NOR structure aggregates the individual per-bit mismatch signals ($MM_0$ to $MM_3$):
 
-## 5. Transmission-Gate AND Gate
+$$MATCH = \overline{MM_0 + MM_1 + MM_2 + MM_3}$$
 
-A transmission gate (TG) is an NMOS and a PMOS connected in parallel, with the NMOS gate driven by a control signal C and the PMOS gate by its complement C̄. When C = 1 both devices conduct; when C = 0 both are off.
+The output $MATCH$ remains logic high ($1$) only when all unmasked bits match ($MM_i = 0$ for all $i$). Any active mismatch ($MM_i = 1$) pulls $MATCH$ to logic low ($0$).
 
-The two devices complement each other. An NMOS passes a strong 0 but a degraded 1 (about V<sub>DD</sub> − V<sub>TN</sub>), while a PMOS passes a strong 1 but a degraded 0 (about |V<sub>TP</sub>|). In parallel, the TG transfers the full logic range.
+![NOR-4 Schematic](nor_4bit_schematic)  
+*Figure 5.1. NOR-4 word combiner schematic.*
 
-The AND function is realized as a selection:
+![NOR-4 Waveform](nor-4_waveform.bmp)  
+*Figure 5.2. Transient simulation waveform of the NOR-4 combiner block.*
 
-$$F = A\cdot B = B\,A + \overline{B}\cdot 0$$
+### 5.3 Top-Level 4-Bit Gate-Level TCAM
 
-A TG controlled by B passes A to the output when B = 1; when B = 0 the output is held at logic 0 by the complementary path controlled by B̄, so F follows the AND truth table. The complement B̄ is obtained from an inverter. The gate was verified functionally in Cadence for all four input combinations.
+The top-level reference model integrates four per-bit mask-control units driving the single NOR-4 combiner block. It operates on 12 input signals ($D[3:0]$, $M[3:0]$, $S[3:0]$) and outputs a scalar $MATCH$ decision signal.
 
-![Transmission-gate AND schematic](images/transmission_gate_and.png)
+![4-Bit Gate-Level TCAM Reference Model Schematic](tcam_4bit_reference_model)  
+*Figure 5.3. Top-level 4-bit gate-level TCAM schematic combining four mask-control modules with the NOR-4 combiner.*
 
-*Figure 3. Transmission-gate AND gate schematic.*
+#### Functional Verification Waveforms
 
-Transmission-gate AND transistor dimensions are not recorded in the project documentation.
+The behavior of the top-level gate-level model was validated under three operating conditions:
 
-## 6. 2-to-4 Address Decoder
+1. **Exact Match Condition ($D = 1010, M = 0000, S = 1010$):** All unmasked bits match, maintaining $MATCH = 1$.
+2. **Masked Match / Don't-Care Condition ($D = 1010, M = 0001, S = 1011$):** Bit 0 differs ($D_0=0, S_0=1$), but $M_0=1$ masks the mismatch, maintaining $MATCH = 1$.
+3. **Mismatch Condition ($D = 1010, M = 0000, S = 1000$):** Bit 1 differs ($D_1=1, S_1=0$) while unmasked ($M_1=0$), forcing $MATCH = 0$.
 
-The decoder takes the address inputs A1 and A0 and drives the word lines WL0–WL3. Two inverters produce Ā1 and Ā0, and four AND gates (Section 5) form the minterms:
+![Exact Match Waveform](tcam_exact_match.bmp)  
+*Figure 5.4. Transient response for exact match condition.*
 
-$$WL_0=\overline{A_1}\,\overline{A_0},\quad WL_1=\overline{A_1}A_0,\quad WL_2=A_1\overline{A_0},\quad WL_3=A_1A_0$$
+![Don't-Care Waveform](tcam_don’t-care.bmp)  
+*Figure 5.5. Transient response for masked don't-care condition.*
 
-| A1 | A0 | WL3 | WL2 | WL1 | WL0 |
-|---|---|---|---|---|---|
-| 0 | 0 | 0 | 0 | 0 | 1 |
-| 0 | 1 | 0 | 0 | 1 | 0 |
-| 1 | 0 | 0 | 1 | 0 | 0 |
-| 1 | 1 | 1 | 0 | 0 | 0 |
+![Mismatch Waveform](tcam_mismatch.bmp)  
+*Figure 5.6. Transient response for mismatch condition.*
 
-The word lines are active-high and one-hot: exactly one is at logic 1 for every address. This is required by the array, because only one row of NMOS transistors may conduct at a time; two active rows would read two stored words onto the same bit lines simultaneously.
+## 6. 6T SRAM Cell and Storage Encoding
 
-![2-to-4 decoder schematic](images/decoder.png)
+### 6.1 Ternary Encoding Scheme
 
-*Figure 4. 2-to-4 decoder schematic.*
+While a Binary Content-Addressable Memory (BCAM) bit requires a single 6T SRAM cell to store logic states `0` and `1`, a Ternary CAM (TCAM) bit must store a third "don't care" state (`X`). To support three valid logical states, each 16T TCAM cell integrates two independent 6T SRAM cells, storing values at internal nodes $Q_1$ and $Q_2$.
 
-Decoder transistor dimensions are not recorded in the project documentation.
+The storage mapping for data ($D$) and mask ($M$, where $M = 1$ indicates don't care) is defined as follows:
 
-## 7. 4×4 NMOS Mask ROM Architecture and Programming
+$$Q_1 = \overline{D} \cdot \overline{M}, \qquad Q_2 = D \cdot \overline{M}$$
 
-| Parameter | Value |
-|---|---|
-| Words × bits per word | 4 × 4 |
-| Address inputs | 2 (A1, A0) |
-| Word lines / bit lines | 4 / 4 |
-| Array crosspoints | 16 (4 word lines × 4 bit lines) |
-| Crosspoints programmed with an NMOS | 6 |
-| Pull-up loads | 4 PMOS, one per bit line |
-
-The array is NOR-type. Word lines drive NMOS gates along the rows; each bit line (column) is tied to V<sub>DD</sub> through a PMOS load and to ground through whichever NMOS devices are placed on it.
-
-**Programming by transistor presence.**
-
-- An NMOS at (WLi, BLj) stores logic **0**: when WLi is high, it pulls BLj towards ground.
-- No NMOS at (WLi, BLj) stores logic **1**: BLj is held high by the PMOS load.
-
-**Stored data**
-
-| Address (A1 A0) | BL3 | BL2 | BL1 | BL0 |
-|---|:-:|:-:|:-:|:-:|
-| 00 | 1 | 0 | 1 | 0 |
-| 01 | 1 | 1 | 0 | 0 |
-| 10 | 0 | 0 | 1 | 1 |
-| 11 | 1 | 1 | 1 | 1 |
-
-**NMOS programming map**
-
-| Device | Gate | Drain | Source / Bulk | Stored zero |
-|---|---|---|---|---|
-| M1 | WL0 | BL2 | GND | Address 00, BL2 |
-| M2 | WL0 | BL0 | GND | Address 00, BL0 |
-| M3 | WL1 | BL1 | GND | Address 01, BL1 |
-| M4 | WL1 | BL0 | GND | Address 01, BL0 |
-| M5 | WL2 | BL3 | GND | Address 10, BL3 |
-| M6 | WL2 | BL2 | GND | Address 10, BL2 |
-
-WL3 has no NMOS devices because address 11 stores 1111.
-
-**Read operation.** The address is applied, the decoder raises one word line, and the NMOS devices on that row discharge their bit lines. All other bit lines stay high. For address 00, WL0 is high and M1 and M2 pull BL2 and BL0 low while BL3 and BL1 remain high, giving 1010. For address 11, WL3 is high but its row has no NMOS devices, so all bit lines stay high, giving 1111. On unselected rows the word line is low and their NMOS devices are off.
-
-![ROM array schematic](images/rom_array.png)
-
-*Figure 5. ROM array schematic.*
-
-## 8. Transistor-Level Implementation: PMOS Pull-Ups and Ratioed Operation
-
-**PMOS pull-up loads.**
-
-| Device | Gate | Source | Drain | Bulk |
-|---|---|---|---|---|
-| MP0 | GND | V<sub>DD</sub> | BL0 | V<sub>DD</sub> |
-| MP1 | GND | V<sub>DD</sub> | BL1 | V<sub>DD</sub> |
-| MP2 | GND | V<sub>DD</sub> | BL2 | V<sub>DD</sub> |
-| MP3 | GND | V<sub>DD</sub> | BL3 | V<sub>DD</sub> |
-
-With the gate at ground and the source at V<sub>DD</sub>, each PMOS has V<sub>SG</sub> = V<sub>DD</sub>, which exceeds |V<sub>TP</sub>|, so it conducts continuously and behaves as a resistive load to V<sub>DD</sub>. When no NMOS is conducting, it holds the bit line high.
-
-**NMOS pull-down.** When a word line is high, the NMOS devices on that row have V<sub>GS</sub> = V<sub>DD</sub> and sink current from their bit lines to ground.
-
-**Ratioed logic.** Because the PMOS never turns off, a pulled-down bit line is a contest between the PMOS pull-up and the NMOS pull-down, and the bit line settles at a low level V<sub>OL</sub> above 0 V. To first order, with the NMOS in the triode region and the PMOS in saturation:
-
-$$\mu_n C_{ox}\left(\frac{W}{L}\right)_n\left[(V_{DD}-V_{TN})V_{OL}-\frac{V_{OL}^2}{2}\right]\approx\frac{1}{2}\mu_p C_{ox}\left(\frac{W}{L}\right)_p\left(V_{DD}-|V_{TP}|\right)^2$$
-
-This long-channel expression shows the trend only: a larger (W/L)<sub>n</sub>/(W/L)<sub>p</sub> gives a lower V<sub>OL</sub>. At 45 nm, short-channel effects mean the actual levels must come from simulation. Ratioed logic also draws static current from V<sub>DD</sub> through the PMOS and the conducting NMOS whenever a bit line is held low.
-
-## 9. Transistor Sizing
-
-**Final ROM array dimensions**
-
-| Devices | Count | W | L | W/L |
-|---|:-:|---|---|---|
-| NMOS programming transistors M1–M6 | 6 | 360 nm | 45 nm | 8.0 |
-| PMOS pull-up transistors MP0–MP3 | 4 | 120 nm | 45 nm | 2.67 |
-
-Supply voltage: V<sub>DD</sub> = 1 V.
-
-**Sizing iterations**
-
-| Step | NMOS W/L | PMOS W/L | NMOS : PMOS |
+| Stored Value | Q1 | Q2 | Description |
 |---|---|---|---|
-| Initial | 240 nm / 45 nm | 240 nm / 45 nm | 1 : 1 |
-| PMOS narrowed | 240 nm / 45 nm | 120 nm / 45 nm | 2 : 1 |
-| **Final** | **360 nm / 45 nm** | **120 nm / 45 nm** | **3 : 1** |
+| **0** | 1 | 0 | Logic 0 stored; compare active |
+| **1** | 0 | 1 | Logic 1 stored; compare active |
+| **X** | 0 | 0 | Don't care state; bit comparison masked |
+| **Invalid** | 1 | 1 | Unused / illegal state |
 
-With the initial equal widths, the output logic-low level was higher than desired because the always-on PMOS competed strongly with the selected NMOS. Narrowing the PMOS weakened the load, and widening the NMOS increased the pull-down current, both of which lower V<sub>OL</sub> (Section 8). The trade-offs are larger NMOS gate and drain capacitance on the word and bit lines, and a weaker PMOS for recharging a bit line when it returns to logic high. These effects were not quantified in this project.
+### 6.2 6T SRAM Circuit Operation
 
-## 10. Transient Simulation and Results
+Each instantiated 6T SRAM cell serves as the static memory storage element. The cell consists of:
 
-A ROM testbench was created in Cadence Virtuoso with V<sub>DD</sub> = 1 V. The address inputs A1 and A0 were stepped through the four addresses, and the word lines WL0–WL3 and bit lines BL0–BL3 were observed in a transient analysis.
+- **Storage Latch (4 Transistors):** Two cross-coupled CMOS inverters ($M_1$–$M_4$) form a bistable latch that holds complementary logic levels at internal nodes $Q$ and $\bar{Q}$.
+- **Access Devices (2 Transistors):** Two NMOS pass-transistors ($M_5$, $M_6$) controlled by the word line ($WL$) connect nodes $Q$ and $\bar{Q}$ to the complementary bit lines ($BL$ and $BLB$).
 
-**Observed behaviour**
+#### Operational Modes:
+- **Hold Mode ($WL = 0$):** Access transistors remain OFF, isolating the internal latch nodes from $BL$ and $BLB$. The cross-coupled inverters maintain the stored voltage level continuously as long as supply power is maintained.
+- **Write Mode ($WL = 1$):** Bit lines $BL$ and $BLB$ are driven to the target logic level and its inverse, respectively. Asserting $WL$ turns ON the access transistors, allowing the external drivers to overpower the cross-coupled inverters and update the latch state.
+- **Read Mode ($WL = 1$):** Bit lines $BL$ and $BLB$ are precharged high. Driving $WL$ high connects the bit lines to the internal nodes. The node holding logic 0 pulls down its corresponding bit line slightly, producing a small differential voltage across $BL$ and $BLB$.
 
-- Each address change activates one word line.
-- The bit lines respond with the programmed word for that address (Section 7); bit lines with an NMOS on the active row go to logic low and the others remain at logic high.
-- The four programmed words were verified.
-- With the initial equal-width sizing, the logic-low level was higher because of the PMOS/NMOS contention; the final 360 nm / 120 nm sizing improved it.
+![6T SRAM Circuit Schematic](images/6t_sram_ckt.png)  
+*Figure 6.1. 6T SRAM cell schematic topology.*
 
-Numerical V<sub>OL</sub> and V<sub>OH</sub> values, power consumption and area were not characterized.
+![6T SRAM Transient Waveform](sram_6t_waveform.bmp)  
+*Figure 6.2. Transient simulation waveform of the 6T SRAM cell.*
 
-![Transient waveforms](images/transient_waveforms.bmp)
+## 7. Match-Line Sense Amplifier
 
-*Figure 6. Transient waveforms of the address inputs, word lines and bit lines.*
+### 7.1 Topology and Pin Definition
 
-![Complete ROM schematic](images/rom_array.png)
+A latch-type differential sense amplifier resolves small voltage variations on the match line ($ML$) relative to a static reference voltage ($V_{REF}$), restoring the decision to full CMOS rail-to-rail digital logic levels (`MATCH` and `MATCH_B`).
 
-*Figure 7. Complete ROM schematic (decoder and array).*
+| Pin / Terminal | Signal Type | Function |
+|---|---|---|
+| **BL / IN** | Input | Connected to the Match Line ($ML$) |
+| **BLB / VREF** | Input | Connected to the static reference voltage ($V_{REF} = 0.55\text{ V}$) |
+| **SA_EN** | Input | Sense amplifier clock / enable signal |
+| **SA_OUT / MATCH** | Output | Regenerated positive match output signal |
+| **SA_OUTB / MATCH_B** | Output | Complementary match output signal |
 
-## 11. Propagation Delay
+### 7.2 Operation Principles
 
-One address-to-output transition was measured using Cadence ViVA at the 0.5 V level (50 % of V<sub>DD</sub>).
+The cross-coupled latch structure operates in two distinct execution phases:
 
-| Event | Time |
-|---|---|
-| A0 crosses 0.5 V | 15.01 ns |
-| BL0 crosses 0.5 V | 15.29 ns |
+1. **Precharge / Reset Phase ($SA\_EN = 0$):**  
+   The PMOS pull-up header devices driven by $SA\_EN$ turn ON, charging the internal evaluation nodes directly to $V_{DD}$. The differential sense path is disabled, resetting both outputs (`SA_OUT` and `SA_OUTB`) to logic high.
 
-$$t_{pd} = 15.29\ \mathrm{ns} - 15.01\ \mathrm{ns} = 0.28\ \mathrm{ns} = 280\ \mathrm{ps}$$
+2. **Evaluation / Sensing Phase ($SA\_EN = 1$):**  
+   The precharge PMOS devices turn OFF, enabling positive feedback within the cross-coupled inverter pair. Small potential differences between the input terminals ($BL$ and $BLB$) dictate the discharge rates of the internal storage nodes. The regenerative cross-coupled latch rapidly pulls the lower-potential side to $GND$ while driving the opposite side to $V_{DD}$, producing a stable full-swing digital output.
 
-This is a **preliminary measurement of a single transition**. It is not the worst-case delay and not the final access time of the ROM. Other address transitions and bit lines were not characterized.
+![Sense Amplifier Architecture](images/sense_amp_architecture.png)  
+*Figure 7.1. Structural topology of the latch-type sense amplifier.*
 
-## 12. Conclusion
+![Sense Amplifier Schematic](sense_amp_schematic)  
+*Figure 7.2. Cadence Virtuoso transistor-level schematic of the sense amplifier.*
 
-A 4×4 NMOS mask ROM was designed at transistor level in Cadence Virtuoso with the gpdk045 technology, progressing from a CMOS inverter and a transmission-gate AND gate to a 2-to-4 decoder and the complete array. The decoder selects one active-high word line per address, six NMOS transistors encode the stored zeros, and four always-on PMOS loads restore the stored ones. Transient simulation at V<sub>DD</sub> = 1 V confirmed the four programmed words.
+![Sense Amplifier Transient Waveform](sense_amp_waveform1.bmp)  
+*Figure 7.3. Transient response waveform showing differential sensing and signal regeneration.*
 
-The design illustrates the central trade-off of ratioed logic: the pull-up must be weak enough and the pull-down strong enough to give a usable logic-low level, at the cost of static current when a bit line is pulled low. The final ROM sizing is NMOS 360 nm / 45 nm and PMOS 120 nm / 45 nm, and a preliminary delay of 280 ps was measured for one transition.
+## 9. 1-Bit TCAM Cell
 
-**Not characterized:** numerical V<sub>OL</sub> and V<sub>OH</sub>, worst-case delay, power consumption and area. Physical layout and post-layout simulation are outside the scope of this document.
+### 9.1 10T TCAM Bit-Cell Topology
+
+Each 1-bit TCAM cell is designed using a **6T SRAM cell** for data storage and **4 NMOS transistors** for search comparison. Therefore, the complete bit cell becomes a **10T TCAM cell**.
+
+The stored data is taken from the SRAM nodes **Q** and **Q̄**, while the search data is applied through **SL** and **SL̄**. A PMOS transistor is used to precharge the **Match Line (ML)** before every search operation.
+
+The comparison network works as follows:
+
+- If the stored bit and searched bit are the same, both discharge paths remain OFF and **ML stays HIGH → MATCH**.
+- If the stored bit and searched bit are different, one of the NMOS stacks turns ON and **ML discharges to LOW → MISMATCH**.
+
+| Stored Data (D) | Search Data (S) | Match Line (ML) | Result |
+|:---:|:---:|:---:|:---:|
+| 0 | 0 | HIGH | MATCH ✅ |
+| 1 | 1 | HIGH | MATCH ✅ |
+| 0 | 1 | LOW | MISMATCH ❌ |
+| 1 | 0 | LOW | MISMATCH ❌ |
+
+![1-bit TCAM Schematic](images/tcam_1bit_schematic.png)
+
+*Figure 5. Schematic of the 1-bit 10T TCAM cell.*
+
+### 9.2 Simulation and Testing of 1-Bit TCAM
+
+The 1-bit TCAM cell was simulated using transient analysis in Cadence Virtuoso with **VDD = 1.8 V**.
+
+The operation was carried out in two phases:
+
+1. **Write Phase** – Data was stored into the 6T SRAM portion using **WL, BL and BL̄**.
+2. **Search Phase** – Search data was applied through **SL and SL̄**, and the Match Line was observed.
+
+### 9.3 Input Test Conditions for 1-Bit TCAM
+
+| Signal | V1 (V) | V2 (V) | TD (ns) | TR (ns) | TF (ns) | PW (ns) | PER (ns) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| PRE_B | 1.8 | 0 | 2 | 0.1 | 0.1 | 8 | 50 |
+| WL | 0 | 1.8 | 12 | 0.1 | 0.1 | 10 | 50 |
+| BL | 0 | 1.8 | 12 | 0.1 | 0.1 | 10 | 50 |
+| BL̄ | 1.8 | 0 | 12 | 0.1 | 0.1 | 10 | 50 |
+| SL | 0 | 1.8 | 28 | 0.1 | 0.1 | 16 | 50 |
+| SL̄ | 1.8 | 0 | 28 | 0.1 | 0.1 | 16 | 50 |
+
+For the tested case:
+
+- **Stored Data, D = 1**
+- **Search Data, S = 1**
+
+Since both values were equal, the Match Line remained HIGH.
+
+✅ **Result = MATCH**
+
+![1-bit TCAM Waveform](images/tcam_1bit_waveform.bmp)
+
+*Figure 6. Transient simulation waveform of the 1-bit 10T TCAM cell.*
+
+## 10. 4-Bit TCAM Row
+
+### 10.1 4-Bit TCAM Row Implementation
+
+Four 1-bit 10T TCAM cells were connected side by side to form a **4-bit TCAM row**. All four cells share a common **Match Line (ML)**, common **WL**, and common **PRE_B** signal.
+
+However, the write and search lines were provided separately to each bit cell:
+
+- **BL0–BL3** and **BL̄0–BL̄3** were used for writing data into each cell
+- **SL0–SL3** and **SL̄0–SL̄3** were used for searching data into each cell
+
+Since the Match Line of all four bits is shared, the row produces a MATCH output only when **all four stored bits match the searched bits**. If even one bit mismatches, the Match Line discharges and the output becomes MISMATCH.
+
+![4-bit TCAM Row Schematic](images/tcam_row_4x4.png)
+
+*Figure 7. Schematic of the 4-bit TCAM row using four 10T TCAM cells.*
+
+### 10.2 Simulation and Testing of 4-Bit TCAM Row
+
+The 4-bit TCAM row was tested using transient simulation with **VDD = 1.8 V**.
+
+### 10.3 Input Test Conditions for 4-Bit TCAM Row
+
+| Signal | V1 (V) | V2 (V) | TD (ns) | TR (ns) | TF (ns) | PW (ns) | PER (ns) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| PRE_B | 1.8 | 0 | 2 | 0.1 | 0.1 | 8 | 60 |
+| WL | 0 | 1.8 | 12 | 0.1 | 0.1 | 10 | 60 |
+
+### 10.4 Test Case 1 — Exact Match
+
+For the exact match condition, the stored data and search data were kept the same.
+
+- **Stored Data, D = 1 0 1 0**
+- **Search Data, S = 1 0 1 0**
+
+| Bit | D | BL | BL̄ | S | SL | SL̄ |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Bit 3 | 1 | 1.8 V | 0 V | 1 | 1.8 V | 0 V |
+| Bit 2 | 0 | 0 V | 1.8 V | 0 | 0 V | 1.8 V |
+| Bit 1 | 1 | 1.8 V | 0 V | 1 | 1.8 V | 0 V |
+| Bit 0 | 0 | 0 V | 1.8 V | 0 | 0 V | 1.8 V |
+
+Since all four bits matched, the shared Match Line remained HIGH.
+
+✅ **Result = MATCH**
+
+![4-bit TCAM Row Match Waveform](images/tcam_row_waveform1.bmp)
+
+*Figure 8. Transient simulation waveform of the 4-bit TCAM row for match condition.*
+
+### 10.5 Test Case 2 — Mismatch Condition
+
+For the mismatch condition, one bit of the search data was changed.
+
+- **Stored Data, D = 1 0 1 0**
+- **Search Data, S = 1 0 0 0**
+
+Because Bit 1 did not match, the Match Line discharged during the evaluate phase.
+
+❌ **Result = MISMATCH**
+
+![4-bit TCAM Row Mismatch Waveform](images/tcam_row_waveform2.bmp)
+
+*Figure 9. Transient simulation waveform of the 4-bit TCAM row for mismatch condition.*
+
+### 10.6 Complete Search Operation
+
+The complete simulation shows the write operation followed by the search operation for multiple cycles. In every match case, the Match Line remains HIGH, while in the mismatch case the Match Line discharges to LOW.
+
+![4-bit TCAM Row Complete Waveform](images/tcam_row_waveform3.bmp)
+
+*Figure 10. Complete transient simulation waveform of the 4-bit TCAM row showing write and search operations.*
+
+## 11. Conclusion
+
+A complete 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CMOS.  
+
+- The 6T SRAM cell provides reliable binary storage.  
+- Two 6T cells plus a four-transistor compare network realise the ternary (0/1/X) functionality.  
+- Four such cells operate on a shared, precharged match line.  
+- A latch-type sense amplifier converts the match-line voltage into a full-swing digital MATCH output.  
+
+All schematic blocks and corresponding transient waveforms are included in this repository. Layout, post-layout extraction, power/delay characterisation and multi-word array construction remain future work.
