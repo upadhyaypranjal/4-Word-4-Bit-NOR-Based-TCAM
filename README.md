@@ -19,7 +19,7 @@ The design is developed hierarchically, progressing from a gate-level reference 
 ### Repository Structure
 
 ```text
-4-Bit-TCAM/
+4-Word-4-Bit-NOR-Based-TCAM/
 │
 ├── README.md
 │
@@ -28,7 +28,11 @@ The design is developed hierarchically, progressing from a gate-level reference 
     ├── architecture.png
     ├── sense_amp_architecture.png
     │
-    ├── 1_Gate_Level_Model/
+    ├── 6t_sram/
+    │   ├── sram_6t_schematic.png
+    │   └── sram_6t_waveform.bmp
+    │
+    ├── gate_level_model/
     │   ├── nor_4bit_schematic.png
     │   ├── nor-4_waveform.bmp
     │   ├── tcam_4bit_reference_model.png
@@ -36,19 +40,15 @@ The design is developed hierarchically, progressing from a gate-level reference 
     │   ├── tcam_dont-care.bmp
     │   └── tcam_mismatch.bmp
     │
-    ├── 2_6T_SRAM/
-    │   ├── sram_6t_schematic.png
-    │   └── sram_6t_waveform.bmp
-    │
-    ├── 3_Sense_Amplifier/
+    ├── sense_amplifier/
     │   ├── sense_amp_schematic.png
     │   └── sense_amp_waveform1.bmp
     │
-    ├── 4_TCAM_1Bit/
+    ├── tcam_1bit/
     │   ├── tcam_1bit_schematic.png
     │   └── tcam_1bit_waveform.bmp
     │
-    └── 5_TCAM_4Bit_Row/
+    └── tcam_4x4/
         ├── tcam_row_4x4.png
         ├── tcam_row_waveform1.bmp
         ├── tcam_row_waveform2.bmp
@@ -112,17 +112,17 @@ $$MATCH = \overline{MM_0 + MM_1 + MM_2 + MM_3}$$
 
 The output $MATCH$ remains logic high ($1$) only when all unmasked bits match ($MM_i = 0$ for all $i$). Any active mismatch ($MM_i = 1$) pulls $MATCH$ to logic low ($0$).
 
-![NOR-4 Schematic](nor_4bit_schematic)  
+![NOR-4 Schematic](images/gate_level_model/nor_4bit_schematic.png)  
 *Figure 5.1. NOR-4 word combiner schematic.*
 
-![NOR-4 Waveform](nor-4_waveform.bmp)  
+![NOR-4 Waveform](images/gate_level_model/nor-4_waveform.bmp)  
 *Figure 5.2. Transient simulation waveform of the NOR-4 combiner block.*
 
 ### 5.3 Top-Level 4-Bit Gate-Level TCAM
 
 The top-level reference model integrates four per-bit mask-control units driving the single NOR-4 combiner block. It operates on 12 input signals ($D[3:0]$, $M[3:0]$, $S[3:0]$) and outputs a scalar $MATCH$ decision signal.
 
-![4-Bit Gate-Level TCAM Reference Model Schematic](tcam_4bit_reference_model)  
+![4-Bit Gate-Level TCAM Reference Model Schematic](images/gate_level_model/tcam_4bit_reference_model)  
 *Figure 5.3. Top-level 4-bit gate-level TCAM schematic combining four mask-control modules with the NOR-4 combiner.*
 
 #### Functional Verification Waveforms
@@ -133,13 +133,13 @@ The behavior of the top-level gate-level model was validated under three operati
 2. **Masked Match / Don't-Care Condition ($D = 1010, M = 0001, S = 1011$):** Bit 0 differs ($D_0=0, S_0=1$), but $M_0=1$ masks the mismatch, maintaining $MATCH = 1$.
 3. **Mismatch Condition ($D = 1010, M = 0000, S = 1000$):** Bit 1 differs ($D_1=1, S_1=0$) while unmasked ($M_1=0$), forcing $MATCH = 0$.
 
-![Exact Match Waveform](tcam_exact_match.bmp)  
+![Exact Match Waveform](images/gate_level_model/tcam_exact_match.bmp)  
 *Figure 5.4. Transient response for exact match condition.*
 
-![Don't-Care Waveform](tcam_don’t-care.bmp)  
+![Don't-Care Waveform](images/gate_level_model/tcam_don’t-care.bmp)  
 *Figure 5.5. Transient response for masked don't-care condition.*
 
-![Mismatch Waveform](tcam_mismatch.bmp)  
+![Mismatch Waveform](images/gate_level_model/tcam_mismatch.bmp)  
 *Figure 5.6. Transient response for mismatch condition.*
 
 ## 6. 6T SRAM Cell and Storage Encoding
@@ -171,10 +171,10 @@ Each instantiated 6T SRAM cell serves as the static memory storage element. The 
 - **Write Mode ($WL = 1$):** Bit lines $BL$ and $BLB$ are driven to the target logic level and its inverse, respectively. Asserting $WL$ turns ON the access transistors, allowing the external drivers to overpower the cross-coupled inverters and update the latch state.
 - **Read Mode ($WL = 1$):** Bit lines $BL$ and $BLB$ are precharged high. Driving $WL$ high connects the bit lines to the internal nodes. The node holding logic 0 pulls down its corresponding bit line slightly, producing a small differential voltage across $BL$ and $BLB$.
 
-![6T SRAM Circuit Schematic](images/6t_sram_ckt.png)  
+![6T SRAM Circuit Schematic](images/6t_sram/6t_sram_ckt.png)  
 *Figure 6.1. 6T SRAM cell schematic topology.*
 
-![6T SRAM Transient Waveform](sram_6t_waveform.bmp)  
+![6T SRAM Transient Waveform](images/6t_sram/sram_6t_waveform.bmp)  
 *Figure 6.2. Transient simulation waveform of the 6T SRAM cell.*
 
 ## 7. Match-Line Sense Amplifier
@@ -201,13 +201,13 @@ The cross-coupled latch structure operates in two distinct execution phases:
 2. **Evaluation / Sensing Phase ($SA\_EN = 1$):**  
    The precharge PMOS devices turn OFF, enabling positive feedback within the cross-coupled inverter pair. Small potential differences between the input terminals ($BL$ and $BLB$) dictate the discharge rates of the internal storage nodes. The regenerative cross-coupled latch rapidly pulls the lower-potential side to $GND$ while driving the opposite side to $V_{DD}$, producing a stable full-swing digital output.
 
-![Sense Amplifier Architecture](images/sense_amp_architecture.png)  
+![Sense Amplifier Architecture](images/sense_amplifier/sense_amp_architecture.png)  
 *Figure 7.1. Structural topology of the latch-type sense amplifier.*
 
-![Sense Amplifier Schematic](sense_amp_schematic)  
+![Sense Amplifier Schematic](images/sense_amplifier/sense_amp_schematic)  
 *Figure 7.2. Cadence Virtuoso transistor-level schematic of the sense amplifier.*
 
-![Sense Amplifier Transient Waveform](sense_amp_waveform1.bmp)  
+![Sense Amplifier Transient Waveform](images/sense_amplifier/sense_amp_waveform1.bmp)  
 *Figure 7.3. Transient response waveform showing differential sensing and signal regeneration.*
 
 ## 9. 1-Bit TCAM Cell
@@ -230,7 +230,7 @@ The comparison network works as follows:
 | 0 | 1 | LOW | MISMATCH ❌ |
 | 1 | 0 | LOW | MISMATCH ❌ |
 
-![1-bit TCAM Schematic](images/tcam_1bit_schematic.png)
+![1-bit TCAM Schematic](images/tcam_1bit/tcam_1bit_schematic.png)
 
 *Figure 5. Schematic of the 1-bit 10T TCAM cell.*
 
@@ -263,7 +263,7 @@ Since both values were equal, the Match Line remained HIGH.
 
 ✅ **Result = MATCH**
 
-![1-bit TCAM Waveform](images/tcam_1bit_waveform.bmp)
+![1-bit TCAM Waveform](images/tcam_1bit/tcam_1bit_waveform.bmp)
 
 *Figure 6. Transient simulation waveform of the 1-bit 10T TCAM cell.*
 
@@ -280,7 +280,7 @@ However, the write and search lines were provided separately to each bit cell:
 
 Since the Match Line of all four bits is shared, the row produces a MATCH output only when **all four stored bits match the searched bits**. If even one bit mismatches, the Match Line discharges and the output becomes MISMATCH.
 
-![4-bit TCAM Row Schematic](images/tcam_row_4x4.png)
+![4-bit TCAM Row Schematic](images/tcam_4x4/tcam_row_4x4.png)
 
 *Figure 7. Schematic of the 4-bit TCAM row using four 10T TCAM cells.*
 
@@ -328,7 +328,7 @@ Because Bit 1 did not match, the Match Line discharged during the evaluate phase
 
 ❌ **Result = MISMATCH**
 
-![4-bit TCAM Row Mismatch Waveform](images/tcam_row_waveform2.bmp)
+![4-bit TCAM Row Mismatch Waveform](images/tcam_4x4/tcam_row_waveform2.bmp)
 
 *Figure 9. Transient simulation waveform of the 4-bit TCAM row for mismatch condition.*
 
@@ -336,7 +336,7 @@ Because Bit 1 did not match, the Match Line discharged during the evaluate phase
 
 The complete simulation shows the write operation followed by the search operation for multiple cycles. In every match case, the Match Line remains HIGH, while in the mismatch case the Match Line discharges to LOW.
 
-![4-bit TCAM Row Complete Waveform](images/tcam_row_waveform3.bmp)
+![4-bit TCAM Row Complete Waveform](images/tcam_4x4/tcam_row_waveform3.bmp)
 
 *Figure 10. Complete transient simulation waveform of the 4-bit TCAM row showing write and search operations.*
 
