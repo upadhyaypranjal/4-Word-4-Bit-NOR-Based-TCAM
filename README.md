@@ -384,29 +384,29 @@ A 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CM
     │
     ├── gate_level_model/
     │   ├── nor_4bit_schematic.png
-    │   ├── nor-4_waveform.png
+    │   ├── nor-4_waveform.bmp
     │   ├── tcam_4bit_reference_model.png
-    │   ├── tcam_exact_match.png
-    │   ├── tcam_dont-care.png
-    │   └── tcam_mismatch.png
+    │   ├── tcam_exact_match.bmp
+    │   ├── tcam_dont-care.bmp
+    │   └── tcam_mismatch.bmp
     │
     ├── sram_6t/
     │   ├── sram_6t_schematic.png
-    │   └── sram_6t_waveform.png
+    │   └── sram_6t_waveform.bmp
     │
     ├── tcam_1bit/
     │   ├── tcam_1bit_schematic.png
-    │   └── tcam_1bit_waveform.png
+    │   └── tcam_1bit_waveform.bmp
     │
     ├── tcam_4bit_row/
-    │   ├── tcam_row_schematic.png
-    │   ├── tcam_row_waveform1.png
-    │   ├── tcam_row_waveform2.png
-    │   └── tcam_row_waveform3.png
+    │   ├── tcam_row_4x4.png
+    │   ├── tcam_row_waveform1.bmp
+    │   ├── tcam_row_waveform2.bmp
+    │   └── tcam_row_waveform3.bmp
     │
     └── sense_amplifier/
         ├── sense_amp_schematic.png
-        └── sense_amp_waveform1.png
+        └── sense_amp_waveform1.bmp
 ```
 
 ## 14. Author
