@@ -1,352 +1,428 @@
-# Design and Full-Custom Implementation of a 4-Bit NOR-Type Ternary CAM (TCAM) Using Cadence Virtuoso (45 nm CMOS Technology)
+# Design and Full-Custom Implementation of a 4-Bit NOR-Type Ternary Content-Addressable Memory (TCAM) Word in Cadence Virtuoso (45 nm)
 
 ## 1. Project Overview
 
-This repository documents the full-custom, transistor-level design of a **4-bit NOR-type Ternary Content-Addressable Memory (TCAM)** in Cadence Virtuoso using the gpdk045 (45 nm) CMOS technology.
+This repository documents the transistor-level design of a **4-bit NOR-type Ternary Content-Addressable Memory (TCAM) word** in Cadence Virtuoso using the gpdk045 (45 nm) CMOS technology at a supply voltage of **0.9 V**.
 
-A TCAM stores three possible states per bit (`0`, `1`, and `X` / don't care) and performs parallel comparisons between a stored word and an input search word, producing a single `MATCH` output.
+A TCAM stores three states per bit (`0`, `1` and `X`, meaning don't care) and compares a stored word against an input search word. In a NOR-type word, all cells share one precharged match line (ML). The ML stays high only if every unmasked bit matches, and any mismatching bit discharges it.
 
-The design is developed hierarchically, progressing from a gate-level reference model to transistor-level memory, comparison, and sensing circuits.
+The design was developed hierarchically, from a gate-level reference model to transistor-level storage, comparison and sensing circuits.
 
-### Design Hierarchy
+### 1.1 Scope and Status
 
-- **Gate-Level Reference Model:** Functional verification using ideal CMOS logic gates (XOR, AND, OR, NOR-4).
-- **6T SRAM Storage Cell:** A static 6-transistor memory cell used twice per TCAM bit for dual-rail storage (`Q1`, `Q2`).
-- **16T NOR-Type TCAM Cell:** Integration of two 6T SRAM cells with a four-NMOS dynamic comparison network.
-- **4-Bit TCAM Row:** Four TCAM cells connected in parallel, sharing a dynamically precharged match line (`ML`) with a 5 fF load.
-- **Latch-Type Sense Amplifier:** A differential cross-coupled amplifier designed for match-line sensing.
+| Item | Status |
+|---|---|
+| Gate-level reference model (mask control + NOR-4) | Completed and verified for three vectors |
+| 6T SRAM cell | Completed; write 0, write 1 and hold verified |
+| 16T NOR-type ternary cell | Schematic complete; one test case simulated (stored 1, searched 1) |
+| 4-bit TCAM row with shared match line | Schematic complete; exact-match and single-bit-mismatch cases simulated |
+| Latch-type sense amplifier | Schematic complete; one input polarity simulated; known limitations (Section 9.5) |
+| Multi-word (4-word) array, write decoder, priority encoder | Not part of the transistor-level results reported here |
+| Layout, parasitic extraction, delay and power characterization | Not performed |
 
-### Repository Structure
+This repository therefore presents **one 4-bit TCAM word**, not a 4-word array. A gate-level 4-word organization with 6T storage, a write decoder and a priority encoder is under development and is not part of the results below.
 
-```text
-4-Word-4-Bit-NOR-Based-TCAM/
-│
-├── README.md
-│
-└── images/
-    │
-    ├── architecture.png
-    ├── sense_amp_architecture.png
-    │
-    ├── 6t_sram/
-    │   ├── sram_6t_schematic.png
-    │   └── sram_6t_waveform.bmp
-    │
-    ├── gate_level_model/
-    │   ├── nor_4bit_schematic.png
-    │   ├── nor-4_waveform.bmp
-    │   ├── tcam_4bit_reference_model.png
-    │   ├── tcam_exact_match.bmp
-    │   ├── tcam_dont-care.bmp
-    │   └── tcam_mismatch.bmp
-    │
-    ├── sense_amplifier/
-    │   ├── sense_amp_schematic.png
-    │   └── sense_amp_waveform1.bmp
-    │
-    ├── tcam_1bit/
-    │   ├── tcam_1bit_schematic.png
-    │   └── tcam_1bit_waveform.bmp
-    │
-    └── tcam_4x4/
-        ├── tcam_row_4x4.png
-        ├── tcam_row_waveform1.bmp
-        ├── tcam_row_waveform2.bmp
-        └── tcam_row_waveform3.bmp
-```
+### 1.2 Design Hierarchy
+
+- **Gate-level reference model:** ideal logic gates (XOR, AND, inverter, OR, NOR-4) used as the functional golden reference.
+- **6T SRAM cell:** the static storage element. Two are used per TCAM bit (nodes `Q1` and `Q2`).
+- **16T NOR-type TCAM cell:** two 6T SRAM cells plus four NMOS transistors forming two series compare stacks on the match line.
+- **4-bit TCAM row:** four 16T cells sharing the match line `ML`, the word line `WL` and a PMOS precharge device.
+- **Latch-type sense amplifier:** a differential cross-coupled amplifier connected to the match line.
 
 ## 2. Technology and Design Tools
 
-| Item              | Detail                                      |
-|-------------------|---------------------------------------------|
-| Technology        | gpdk045 (45 nm CMOS)                        |
-| Devices           | g45n1svt (NMOS), g45p1svt (PMOS), L = 45 nm |
-| Design entry      | Cadence Virtuoso Schematic Editor           |
-| Simulation        | Spectre transient analysis (ADE)            |
-| Waveform viewer   | Virtuoso Visualization & Analysis (ViVA)    |
-| Supply            | VDD = 0.9 V                                 |
-| Match-line load   | CML = 5 fF                                  |
+| Item | Detail |
+|---|---|
+| Technology | gpdk045 (45 nm CMOS) |
+| Devices | `nmos1v` (g45n1svt) and `pmos1v` (g45p1svt), L = 45 nm |
+| Supply voltage | VDD = 0.9 V (all simulations) |
+| Design entry | Cadence Virtuoso Schematic Editor |
+| Simulation | Spectre transient analysis (ADE) |
+| Waveform viewer | Virtuoso Visualization and Analysis (ViVA) |
+| Output loads | 5 fF capacitors on the sense amplifier outputs `MATCH` and `MATCH_B` |
+
+No explicit capacitor is drawn on the match line itself. Its capacitance is that of the connected device terminals only.
 
 ## 3. Architecture
 
-The 4-bit TCAM word consists of four 16T TCAM cells sharing a single precharged match line (ML). A PMOS precharge transistor restores ML to VDD prior to each search evaluation. An explicit capacitor ($C_{ML} = 5\text{ fF}$) models the total parasitic capacitance of the line. The match line connects directly to a latch-type sense amplifier, which senses the ML discharge and outputs a full-swing digital MATCH signal.
+The 4-bit TCAM word consists of four 16T cells sharing a single match line. A PMOS transistor (W = 480 nm, gate `PRE_B`) precharges `ML` to VDD before each search. During the search, each cell's compare network either leaves `ML` high (match) or discharges it (mismatch). The match line is connected to the `IN` pin of the latch-type sense amplifier, which is intended to regenerate the match-line level into a digital `MATCH` signal.
 
 ![TCAM Architecture](images/architecture.png)
+
 *Figure 1. Architecture of the 4-bit NOR-type TCAM word.*
 
 ## 4. Flow of Implementation
 
-1. Gate-level functional reference (XOR-AND mask control + NOR-4).  
-2. 6T SRAM cell design and verification.  
-3. 16T TCAM bit cell (two 6T SRAMs + four compare NMOS).  
-4. 1-bit TCAM cell characterization.  
-5. 4-bit TCAM row with shared match line.  
-6. Latch-type match-line sense amplifier.  
-7. Integration and final verification.
+1. Gate-level functional reference (XOR-AND mask control and NOR-4).
+2. 6T SRAM cell design and verification.
+3. 16T ternary cell (two 6T SRAM cells and four compare NMOS transistors).
+4. 1-bit cell test.
+5. 4-bit TCAM row with a shared match line.
+6. Latch-type match-line sense amplifier.
 
 ## 5. Gate-Level Reference Model
 
-The gate-level reference model establishes the golden functional baseline for the TCAM array. It models the per-bit comparison, don't-care masking, and multi-bit match aggregation using ideal logic gates to verify system functionality prior to full-custom transistor-level design.
+The gate-level model is the functional reference for the TCAM word. It models the per-bit comparison, the don't-care masking and the word-level match using ideal gates.
 
 ### 5.1 Per-Bit Mask Control
 
-Each bit position evaluates the stored data bit ($D_i$), search bit ($S_i$), and mask bit ($M_i$). The per-bit comparison generates an intermediate mismatch signal ($MM_i$):
+For each bit, with stored data `D`, search bit `S` and mask `M`:
 
 $$X_i = D_i \oplus S_i, \qquad MM_i = X_i \cdot \overline{M_i}$$
 
-- **$M_i = 0$ (Search Mode):** The bit is actively compared. If $D_i \neq S_i$, $MM_i = 1$ (mismatch).
-- **$M_i = 1$ (Masked Mode):** The bit is ignored (don't care state X), forcing $MM_i = 0$ regardless of $D_i$ and $S_i$.
+- `M = 0`: the bit is compared. If `D` differs from `S`, `MM = 1` (mismatch).
+- `M = 1`: the bit is masked (don't care) and `MM = 0` regardless of `D` and `S`.
 
-| $M_i$ | $D_i \oplus S_i$ | $MM_i$ (Mismatch) | Functional State |
+| M | D ⊕ S | MM (mismatch) | State |
 |---|---|---|---|
-| 0 | 0 | 0 | Compared, bits equal (Match) |
-| 0 | 1 | 1 | Compared, bits differ (Mismatch) |
-| 1 | 0 | 0 | Masked (Don't Care) |
-| 1 | 1 | 0 | Masked (Don't Care) |
+| 0 | 0 | 0 | Compared, equal |
+| 0 | 1 | 1 | Compared, different |
+| 1 | 0 | 0 | Masked |
+| 1 | 1 | 0 | Masked |
 
 ### 5.2 NOR-4 Word Combiner
 
-In a NOR-type TCAM architecture, a single mismatching bit in a word must drive the overall word output to logic low. To implement this functional behavior at the gate level, a 4-input NOR structure aggregates the individual per-bit mismatch signals ($MM_0$ to $MM_3$):
-
 $$MATCH = \overline{MM_0 + MM_1 + MM_2 + MM_3}$$
 
-The output $MATCH$ remains logic high ($1$) only when all unmasked bits match ($MM_i = 0$ for all $i$). Any active mismatch ($MM_i = 1$) pulls $MATCH$ to logic low ($0$).
+`MATCH` is high only when all four mismatch signals are 0.
 
-![NOR-4 Schematic](images/gate_level_model/nor_4bit_schematic.png)  
-*Figure 5.1. NOR-4 word combiner schematic.*
+![NOR-4 Schematic](images/gate_level_model/nor_4bit_schematic.png)
 
-![NOR-4 Waveform](images/gate_level_model/nor-4_waveform.bmp)  
-*Figure 5.2. Transient simulation waveform of the NOR-4 combiner block.*
+*Figure 2. NOR-4 word combiner schematic (three OR gates and an inverter).*
+
+The NOR-4 block was simulated with four inputs `A`, `B`, `C`, `D` forming a binary counting pattern (periods of 20, 40, 80 and 160 ns, all starting at 10 ns). `MATCH` is high only when all four inputs are low: at 0–10 ns, 160–170 ns, 320–330 ns and 480–490 ns, which agrees with the expected behavior.
+
+![NOR-4 Waveform](images/gate_level_model/nor-4_waveform.bmp)
+
+*Figure 3. Transient waveform of the NOR-4 combiner.*
 
 ### 5.3 Top-Level 4-Bit Gate-Level TCAM
 
-The top-level reference model integrates four per-bit mask-control units driving the single NOR-4 combiner block. It operates on 12 input signals ($D[3:0]$, $M[3:0]$, $S[3:0]$) and outputs a scalar $MATCH$ decision signal.
+Four mask-control units drive the NOR-4 combiner. The inputs are `D[3:0]`, `M[3:0]` and `S[3:0]`, and the output is `MATCH`.
 
-![4-Bit Gate-Level TCAM Reference Model Schematic](images/gate_level_model/tcam_4bit_reference_model)  
-*Figure 5.3. Top-level 4-bit gate-level TCAM schematic combining four mask-control modules with the NOR-4 combiner.*
+![4-Bit Gate-Level TCAM](images/gate_level_model/tcam_4bit_reference_model.png)
 
-#### Functional Verification Waveforms
+*Figure 4. Top-level 4-bit gate-level TCAM reference model.*
 
-The behavior of the top-level gate-level model was validated under three operating conditions:
+| Case | D | M | S | Expected MATCH | Simulated MATCH |
+|---|---|---|---|---|---|
+| Exact match | 1010 | 0000 | 1010 | 1 | about 0.9 V |
+| Masked mismatch (don't care) | 1010 | 0001 | 1011 | 1 | about 0.9 V |
+| Unmasked mismatch (bit 1) | 1010 | 0000 | 1000 | 0 | about 43 nV (logic 0) |
 
-1. **Exact Match Condition ($D = 1010, M = 0000, S = 1010$):** All unmasked bits match, maintaining $MATCH = 1$.
-2. **Masked Match / Don't-Care Condition ($D = 1010, M = 0001, S = 1011$):** Bit 0 differs ($D_0=0, S_0=1$), but $M_0=1$ masks the mismatch, maintaining $MATCH = 1$.
-3. **Mismatch Condition ($D = 1010, M = 0000, S = 1000$):** Bit 1 differs ($D_1=1, S_1=0$) while unmasked ($M_1=0$), forcing $MATCH = 0$.
+![Exact Match](images/gate_level_model/tcam_exact_match.bmp)
 
-![Exact Match Waveform](images/gate_level_model/tcam_exact_match.bmp)  
-*Figure 5.4. Transient response for exact match condition.*
+*Figure 5. Exact match.*
 
-![Don't-Care Waveform](images/gate_level_model/tcam_don’t-care.bmp)  
-*Figure 5.5. Transient response for masked don't-care condition.*
+![Don't Care](images/gate_level_model/tcam_dontcare.bmp)
 
-![Mismatch Waveform](images/gate_level_model/tcam_mismatch.bmp)  
-*Figure 5.6. Transient response for mismatch condition.*
+*Figure 6. Masked (don't-care) mismatch.*
 
-## 6. 6T SRAM Cell and Storage Encoding
+![Mismatch](images/gate_level_model/tcam_mismatch.bmp)
 
-### 6.1 Ternary Encoding Scheme
+*Figure 7. Unmasked mismatch.*
 
-While a Binary Content-Addressable Memory (BCAM) bit requires a single 6T SRAM cell to store logic states `0` and `1`, a Ternary CAM (TCAM) bit must store a third "don't care" state (`X`). To support three valid logical states, each 16T TCAM cell integrates two independent 6T SRAM cells, storing values at internal nodes $Q_1$ and $Q_2$.
+Note: in this model, `D` and `M` are DC inputs. The model verifies the match function but does not store data.
 
-The storage mapping for data ($D$) and mask ($M$, where $M = 1$ indicates don't care) is defined as follows:
+## 6. 6T SRAM Cell
 
-$$Q_1 = \overline{D} \cdot \overline{M}, \qquad Q_2 = D \cdot \overline{M}$$
+### 6.1 Circuit
 
-| Stored Value | Q1 | Q2 | Description |
-|---|---|---|---|
-| **0** | 1 | 0 | Logic 0 stored; compare active |
-| **1** | 0 | 1 | Logic 1 stored; compare active |
-| **X** | 0 | 0 | Don't care state; bit comparison masked |
-| **Invalid** | 1 | 1 | Unused / illegal state |
+The storage core consists of two cross-coupled inverters (`PM1`/`NM1` and `PM2`/`NM2`) and two NMOS access transistors (`A1`, `A2`) controlled by `WL`. In the implemented cell, each of the outputs `Q` and `QB` is passed through a two-inverter buffer, so the compare transistors of the TCAM cell load the buffer instead of the storage nodes.
 
-### 6.2 6T SRAM Circuit Operation
-
-Each instantiated 6T SRAM cell serves as the static memory storage element. The cell consists of:
-
-- **Storage Latch (4 Transistors):** Two cross-coupled CMOS inverters ($M_1$–$M_4$) form a bistable latch that holds complementary logic levels at internal nodes $Q$ and $\bar{Q}$.
-- **Access Devices (2 Transistors):** Two NMOS pass-transistors ($M_5$, $M_6$) controlled by the word line ($WL$) connect nodes $Q$ and $\bar{Q}$ to the complementary bit lines ($BL$ and $BLB$).
-
-#### Operational Modes:
-- **Hold Mode ($WL = 0$):** Access transistors remain OFF, isolating the internal latch nodes from $BL$ and $BLB$. The cross-coupled inverters maintain the stored voltage level continuously as long as supply power is maintained.
-- **Write Mode ($WL = 1$):** Bit lines $BL$ and $BLB$ are driven to the target logic level and its inverse, respectively. Asserting $WL$ turns ON the access transistors, allowing the external drivers to overpower the cross-coupled inverters and update the latch state.
-- **Read Mode ($WL = 1$):** Bit lines $BL$ and $BLB$ are precharged high. Driving $WL$ high connects the bit lines to the internal nodes. The node holding logic 0 pulls down its corresponding bit line slightly, producing a small differential voltage across $BL$ and $BLB$.
-
-![6T SRAM Circuit Schematic](images/6t_sram/6t_sram_ckt.png)  
-*Figure 6.1. 6T SRAM cell schematic topology.*
-
-![6T SRAM Transient Waveform](images/6t_sram/sram_6t_waveform.bmp)  
-*Figure 6.2. Transient simulation waveform of the 6T SRAM cell.*
-
-## 7. Match-Line Sense Amplifier
-
-### 7.1 Topology and Pin Definition
-
-A latch-type differential sense amplifier resolves small voltage variations on the match line ($ML$) relative to a static reference voltage ($V_{REF}$), restoring the decision to full CMOS rail-to-rail digital logic levels (`MATCH` and `MATCH_B`).
-
-| Pin / Terminal | Signal Type | Function |
+| Device | Role | W / L |
 |---|---|---|
-| **BL / IN** | Input | Connected to the Match Line ($ML$) |
-| **BLB / VREF** | Input | Connected to the static reference voltage ($V_{REF} = 0.55\text{ V}$) |
-| **SA_EN** | Input | Sense amplifier clock / enable signal |
-| **SA_OUT / MATCH** | Output | Regenerated positive match output signal |
-| **SA_OUTB / MATCH_B** | Output | Complementary match output signal |
+| PM1, PM2 | Pull-up PMOS | 180 nm / 45 nm |
+| NM1, NM2 | Pull-down NMOS | 360 nm / 45 nm |
+| A1, A2 | Access NMOS | 250 nm / 45 nm |
+| Output buffers | Two inverters each on Q and QB | Inverter sub-cells |
 
-### 7.2 Operation Principles
+The pull-down to access ratio is 360/250 = 1.44, and the pull-up to access ratio is 180/250 = 0.72.
 
-The cross-coupled latch structure operates in two distinct execution phases:
+![6T SRAM Schematic](images/6t_sram/sram_6t_schematic.png)
 
-1. **Precharge / Reset Phase ($SA\_EN = 0$):**  
-   The PMOS pull-up header devices driven by $SA\_EN$ turn ON, charging the internal evaluation nodes directly to $V_{DD}$. The differential sense path is disabled, resetting both outputs (`SA_OUT` and `SA_OUTB`) to logic high.
+*Figure 8. 6T SRAM cell schematic with buffered outputs.*
 
-2. **Evaluation / Sensing Phase ($SA\_EN = 1$):**  
-   The precharge PMOS devices turn OFF, enabling positive feedback within the cross-coupled inverter pair. Small potential differences between the input terminals ($BL$ and $BLB$) dictate the discharge rates of the internal storage nodes. The regenerative cross-coupled latch rapidly pulls the lower-potential side to $GND$ while driving the opposite side to $V_{DD}$, producing a stable full-swing digital output.
+### 6.2 Operation
 
-![Sense Amplifier Architecture](images/sense_amplifier/sense_amp_architecture.png)  
-*Figure 7.1. Structural topology of the latch-type sense amplifier.*
+- **Hold (`WL` = 0):** the access transistors are off and the cross-coupled inverters retain the stored value.
+- **Write (`WL` = 1):** `BL` and `BLB` are driven to complementary levels and overpower the cell through the access transistors.
+- **Read:** conventional bit-line read is not exercised, because the TCAM uses `Q` and `QB` only as gate inputs of the compare stacks. Read stability was not simulated.
 
-![Sense Amplifier Schematic](images/sense_amplifier/sense_amp_schematic)  
-*Figure 7.2. Cadence Virtuoso transistor-level schematic of the sense amplifier.*
+### 6.3 Test Conditions
 
-![Sense Amplifier Transient Waveform](images/sense_amplifier/sense_amp_waveform1.bmp)  
-*Figure 7.3. Transient response waveform showing differential sensing and signal regeneration.*
+| Signal | V1 (V) | V2 (V) | TD (ns) | TR / TF (ns) | PW (ns) | PER (ns) |
+|---|---:|---:|---:|---:|---:|---:|
+| WL | 0 | 0.9 | 10 | 0.1 | 10 | 20 |
+| BL | 0.9 | 0 | 5 | 0.1 | 20 | 40 |
+| BLB | 0 | 0.9 | 5 | 0.1 | 20 | 40 |
 
-## 9. 1-Bit TCAM Cell
+`BL` and `BLB` are exact complements, and their edges (5, 25, 45 ns and so on) are always at least 5 ns away from the `WL` edges, so data never changes at the same time as a word-line edge. The simulation runs to 250 ns.
 
-### 9.1 10T TCAM Bit-Cell Topology
+### 6.4 Results
 
-Each 1-bit TCAM cell is designed using a **6T SRAM cell** for data storage and **4 NMOS transistors** for search comparison. Therefore, the complete bit cell becomes a **10T TCAM cell**.
+`Q` changes only when `WL` is high and follows `BL`. It holds its value while `WL` is low, including when `BL` and `BLB` change. `Q` and `QB` are complementary and swing between about 0 V and about 0.9 V. Write 0, write 1 and hold are all demonstrated.
 
-The stored data is taken from the SRAM nodes **Q** and **Q̄**, while the search data is applied through **SL** and **SL̄**. A PMOS transistor is used to precharge the **Match Line (ML)** before every search operation.
+![6T SRAM Waveform](images/6t_sram/sram_6t_waveform.bmp)
 
-The comparison network works as follows:
+*Figure 9. Transient waveform of the 6T SRAM cell.*
 
-- If the stored bit and searched bit are the same, both discharge paths remain OFF and **ML stays HIGH → MATCH**.
-- If the stored bit and searched bit are different, one of the NMOS stacks turns ON and **ML discharges to LOW → MISMATCH**.
+## 7. Latch-Type Match-Line Sense Amplifier
 
-| Stored Data (D) | Search Data (S) | Match Line (ML) | Result |
-|:---:|:---:|:---:|:---:|
-| 0 | 0 | HIGH | MATCH ✅ |
-| 1 | 1 | HIGH | MATCH ✅ |
-| 0 | 1 | LOW | MISMATCH ❌ |
-| 1 | 0 | LOW | MISMATCH ❌ |
+### 7.1 Topology
 
-![1-bit TCAM Schematic](images/tcam_1bit/tcam_1bit_schematic.png)
+| Device | Role | W / L |
+|---|---|---|
+| N1 (M_IN1) | Input transistor, gate `IN` | 360 nm / 45 nm |
+| N3 (M_IN2) | Reference transistor, gate `VREF` | 360 nm / 45 nm |
+| N2 | Tail switch, gate `SA_EN` | 600 nm / 45 nm |
+| N4, N5 (M_N1, M_N2) | Cross-coupled NMOS latch, sources to ground | 1.2 µm / 45 nm |
+| P1, P2 (M_P1, M_P2) | Cross-coupled PMOS latch | 960 nm / 45 nm |
+| P3, P4 | Reset PMOS, gate `SA_EN`, drains on the outputs | 600 nm / 45 nm |
 
-*Figure 5. Schematic of the 1-bit 10T TCAM cell.*
+![Sense Amplifier Architecture](images/sense_amplifier/sense_amp_architecture.png)
 
-### 9.2 Simulation and Testing of 1-Bit TCAM
+*Figure 16. Structure of the latch-type sense amplifier.*
 
-The 1-bit TCAM cell was simulated using transient analysis in Cadence Virtuoso with **VDD = 1.8 V**.
+![Sense Amplifier Schematic](images/sense_amplifier/sense_amp_schematic.png)
 
-The operation was carried out in two phases:
+*Figure 17. Transistor-level schematic of the sense amplifier.*
 
-1. **Write Phase** – Data was stored into the 6T SRAM portion using **WL, BL and BL̄**.
-2. **Search Phase** – Search data was applied through **SL and SL̄**, and the Match Line was observed.
+### 7.2 Pin Definition
 
-### 9.3 Input Test Conditions for 1-Bit TCAM
+| Pin | Direction | Function |
+|---|---|---|
+| IN | Input | Match line `ML` |
+| VREF | Input | Static reference voltage |
+| SA_EN | Input | Enable / clock |
+| OUT (`MATCH`) | Output | Positive output |
+| OUTB (`MATCH_B`) | Output | Complementary output |
 
-| Signal | V1 (V) | V2 (V) | TD (ns) | TR (ns) | TF (ns) | PW (ns) | PER (ns) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| PRE_B | 1.8 | 0 | 2 | 0.1 | 0.1 | 8 | 50 |
-| WL | 0 | 1.8 | 12 | 0.1 | 0.1 | 10 | 50 |
-| BL | 0 | 1.8 | 12 | 0.1 | 0.1 | 10 | 50 |
-| BL̄ | 1.8 | 0 | 12 | 0.1 | 0.1 | 10 | 50 |
-| SL | 0 | 1.8 | 28 | 0.1 | 0.1 | 16 | 50 |
-| SL̄ | 1.8 | 0 | 28 | 0.1 | 0.1 | 16 | 50 |
+### 7.3 Intended Operation
 
-For the tested case:
+1. **Reset (`SA_EN` = 0):** the reset PMOS devices pull both outputs toward VDD and the tail switch is off.
+2. **Evaluation (`SA_EN` = 1):** the tail switch turns on, the input pair develops a difference according to `IN` relative to `VREF`, and the cross-coupled latch regenerates it so that one output goes high and the other low.
 
-- **Stored Data, D = 1**
-- **Search Data, S = 1**
+### 7.4 Test Conditions and Results
 
-Since both values were equal, the Match Line remained HIGH.
+| Signal | Value |
+|---|---|
+| IN | DC, about 0.85 V |
+| VREF | DC, 0.75 V |
+| SA_EN | V1 = 0, V2 = 0.9 V, TD = 10 ns, PW = 20 ns, PER = 40 ns |
+| Stop time | 100 ns |
 
-✅ **Result = MATCH**
+| Phase | OUT | OUTB |
+|---|---|---|
+| Before first enable (t < 10 ns) | about 0.66 V | about 0.68 V |
+| `SA_EN` high | about 0.82 V | about 0.02 V |
+| `SA_EN` low (after first evaluation) | about 0.83 V | about 0.10 V |
+
+![Sense Amplifier Waveform](images/sense_amplifier/sense_amp_waveform1.bmp)
+
+*Figure 18. Sense amplifier transient waveform with IN above VREF.*
+
+### 7.5 Observations and Limitations
+
+1. **Correct decision for one polarity.** With `IN` above `VREF`, `OUT` goes high and `OUTB` goes low when `SA_EN` rises, and the result repeats each cycle.
+2. **Outputs are not full swing.** `OUT` reaches only about 0.82 V (supply 0.9 V), and `OUTB` does not reach exactly 0 V.
+3. **Reset is incomplete.** With `SA_EN` low, the outputs do not return to VDD and the amplifier keeps its previous decision. The sources of the cross-coupled NMOS transistors (N4, N5) are connected directly to ground, so the latch is always active, and the 600 nm reset PMOS devices cannot overcome the 1.2 µm latch NMOS devices.
+4. **Only one input polarity was simulated.** The reverse case (`IN` below `VREF`), a sequence in which `IN` changes between cycles, and the minimum resolvable input difference have not been tested.
+5. **The row-level results in this repository are match-line waveforms.** The sense amplifier output behavior for the integrated row is not reported.
+
+
+## 8. 16T NOR-Type Ternary Cell
+
+### 8.1 Topology
+
+Each ternary cell contains:
+
+- two 6T SRAM cells, storing `Q1` and `Q2` (sharing `WL`, each with its own bit-line pair `BL1`/`BLB1` and `BL2`/`BLB2`);
+- two series NMOS compare stacks between `ML` and ground, each with W = 240 nm and L = 45 nm:
+  - **Stack A:** `N1` (gate `SL`) in series with `N2` (gate `Q1`);
+  - **Stack B:** `NM1` (gate `SLB`) in series with `NM3` (gate `Q2`).
+
+The `QB` outputs of both SRAM cells are not used. The total transistor count is 2 × 6 + 4 = 16, plus the buffer inverters inside the SRAM sub-cells.
+
+![16T TCAM Cell Schematic](images/tcam_1bit/tcam_1bit_schematic.png)
+
+*Figure 10. Schematic of the 16T ternary cell.*
+
+### 8.2 Ternary Storage Encoding
+
+With data `D` and mask `M` (`M = 1` means don't care):
+
+$$Q_1 = \overline{D}\cdot\overline{M}, \qquad Q_2 = D\cdot\overline{M}$$
+
+| Stored value | Q1 | Q2 | Write levels during `WL` high: BL1 / BLB1 / BL2 / BLB2 |
+|---|---|---|---|
+| 0 | 1 | 0 | 0.9 V / 0 V / 0 V / 0.9 V |
+| 1 | 0 | 1 | 0 V / 0.9 V / 0.9 V / 0 V |
+| X | 0 | 0 | 0 V / 0.9 V / 0 V / 0.9 V |
+| Invalid | 1 | 1 | Not used |
+
+Search-line encoding:
+
+| Search key | SL | SLB |
+|---|---|---|
+| 0 | 0 V | 0.9 V |
+| 1 | 0.9 V | 0 V |
+| X (global mask) | 0 V | 0 V |
+
+### 8.3 Compare Operation
+
+A stack conducts, and discharges `ML`, only when both of its gates are high.
+
+| Stored | Search 0 | Search 1 | Search X |
+|---|---|---|---|
+| 0 | Match (ML high) | Mismatch (Stack A on) | Match |
+| 1 | Mismatch (Stack B on) | Match (ML high) | Match |
+| X | Match | Match | Match |
+
+### 8.4 Test of the 1-Bit Cell
+
+The cell was tested in two phases: a write phase (`WL` pulse with write bit lines) and a search phase (`SL`/`SLB` pulses), with `ML` precharged beforehand by `PRE_B`. Tested case: stored `D = 1`, search `S = 1`, which should leave `ML` high.
+
+| Signal | V1 (V) | V2 (V) | TD (ns) | TR / TF (ns) | PW (ns) | PER (ns) |
+|---|---:|---:|---:|---:|---:|---:|
+| PRE_B | 0.9 | 0 | 2 | 0.1 | 8 | 50 |
+| WL | 0 | 0.9 | 12 | 0.1 | 10 | 50 |
+| BL1 | 0.9 | 0 | 12 | 0.1 | 10 | 50 |
+| BLB1 | 0 | 0.9 | 12 | 0.1 | 10 | 50 |
+| BL2 | 0 | 0.9 | 12 | 0.1 | 10 | 50 |
+| BLB2 | 0.9 | 0 | 12 | 0.1 | 10 | 50 |
+| SL | 0 | 0.9 | 28 | 0.1 | 16 | 50 |
+| SLB | 0.9 | 0 | 28 | 0.1 | 16 | 50 |
+
+Result: `ML` remains high, which is a match.
 
 ![1-bit TCAM Waveform](images/tcam_1bit/tcam_1bit_waveform.bmp)
 
-*Figure 6. Transient simulation waveform of the 1-bit 10T TCAM cell.*
+*Figure 11. Transient waveform of the 16T ternary cell.*
 
-## 10. 4-Bit TCAM Row
+Only this single case (stored 1, searched 1) has been simulated for the cell.
 
-### 10.1 4-Bit TCAM Row Implementation
+## 9. 4-Bit TCAM Row
 
-Four 1-bit 10T TCAM cells were connected side by side to form a **4-bit TCAM row**. All four cells share a common **Match Line (ML)**, common **WL**, and common **PRE_B** signal.
+### 9.1 Implementation
 
-However, the write and search lines were provided separately to each bit cell:
+Four 16T cells are connected side by side. They share the match line `ML`, the word line `WL` and the precharge signal `PRE_B`. Each cell has its own write bit lines (`BL1_i`, `BLB1_i`, `BL2_i`, `BLB2_i`) and search lines (`SL_i`, `SLB_i`). `ML` is also connected to the input of the sense amplifier. The row produces a match only when all four stored bits match the search bits (or are masked).
 
-- **BL0–BL3** and **BL̄0–BL̄3** were used for writing data into each cell
-- **SL0–SL3** and **SL̄0–SL̄3** were used for searching data into each cell
+![4-bit TCAM Row Schematic](images/tcam__row_4x4/tcam_row_schematic.png)
 
-Since the Match Line of all four bits is shared, the row produces a MATCH output only when **all four stored bits match the searched bits**. If even one bit mismatches, the Match Line discharges and the output becomes MISMATCH.
+*Figure 12. Schematic of the 4-bit TCAM row with the sense amplifier.*
 
-![4-bit TCAM Row Schematic](images/tcam_4x4/tcam_row_4x4.png)
+### 9.2 Test Conditions
 
-*Figure 7. Schematic of the 4-bit TCAM row using four 10T TCAM cells.*
+| Signal | V1 (V) | V2 (V) | TD (ns) | TR / TF (ns) | PW (ns) | PER (ns) |
+|---|---:|---:|---:|---:|---:|---:|
+| PRE_B | 0.9 | 0 | 2 | 0.1 | 8 | 60 |
+| WL | 0 | 0.9 | 12 | 0.1 | 10 | 60 |
 
-### 10.2 Simulation and Testing of 4-Bit TCAM Row
+The write bit-line pulses follow the `WL` timing and the search-line pulses follow the 1-bit cell test (TD = 28 ns, PW = 16 ns), with a 60 ns period. Bit-line and search-line levels for each stored value and search key are given in Section 7.2.
 
-The 4-bit TCAM row was tested using transient simulation with **VDD = 1.8 V**.
+### 9.3 Test Case 1: Exact Match
 
-### 10.3 Input Test Conditions for 4-Bit TCAM Row
+Stored `D = 1010` and search `S = 1010`. All bits match, so `ML` stays high.
 
-| Signal | V1 (V) | V2 (V) | TD (ns) | TR (ns) | TF (ns) | PW (ns) | PER (ns) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| PRE_B | 1.8 | 0 | 2 | 0.1 | 0.1 | 8 | 60 |
-| WL | 0 | 1.8 | 12 | 0.1 | 0.1 | 10 | 60 |
+| Bit | Stored | BL1 / BLB1 / BL2 / BLB2 (write) | Search | SL / SLB |
+|:---:|:---:|:---:|:---:|:---:|
+| 3 | 1 | 0 / 0.9 / 0.9 / 0 V | 1 | 0.9 / 0 V |
+| 2 | 0 | 0.9 / 0 / 0 / 0.9 V | 0 | 0 / 0.9 V |
+| 1 | 1 | 0 / 0.9 / 0.9 / 0 V | 1 | 0.9 / 0 V |
+| 0 | 0 | 0.9 / 0 / 0 / 0.9 V | 0 | 0 / 0.9 V |
 
-### 10.4 Test Case 1 — Exact Match
+Result: match.
 
-For the exact match condition, the stored data and search data were kept the same.
+![Row Match Waveform](images/tcam__4x4/tcam_row_waveform1.bmp)
 
-- **Stored Data, D = 1 0 1 0**
-- **Search Data, S = 1 0 1 0**
+*Figure 13. Match condition.*
 
-| Bit | D | BL | BL̄ | S | SL | SL̄ |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Bit 3 | 1 | 1.8 V | 0 V | 1 | 1.8 V | 0 V |
-| Bit 2 | 0 | 0 V | 1.8 V | 0 | 0 V | 1.8 V |
-| Bit 1 | 1 | 1.8 V | 0 V | 1 | 1.8 V | 0 V |
-| Bit 0 | 0 | 0 V | 1.8 V | 0 | 0 V | 1.8 V |
+### 9.4 Test Case 2: Mismatch
 
-Since all four bits matched, the shared Match Line remained HIGH.
+Stored `D = 1010` and search `S = 1000`. Bit 1 differs (stored 1, searched 0), so Stack B of cell 1 conducts and `ML` discharges.
 
-✅ **Result = MATCH**
+Result: mismatch.
 
-![4-bit TCAM Row Match Waveform](images/tcam_row_waveform1.bmp)
+![Row Mismatch Waveform](images/tcam__4x4/tcam_row_waveform2.bmp)
 
-*Figure 8. Transient simulation waveform of the 4-bit TCAM row for match condition.*
+*Figure 14. Mismatch condition.*
 
-### 10.5 Test Case 2 — Mismatch Condition
+### 9.5 Complete Search Operation
 
-For the mismatch condition, one bit of the search data was changed.
+The complete simulation shows the write operation followed by the search operation over multiple cycles. `ML` stays high for the match case and discharges for the mismatch case.
 
-- **Stored Data, D = 1 0 1 0**
-- **Search Data, S = 1 0 0 0**
+![Row Complete Waveform](images/tcam_4x4/tcam_row_waveform3.bmp)
 
-Because Bit 1 did not match, the Match Line discharged during the evaluate phase.
+*Figure 15. Write and search operations of the 4-bit row.*
 
-❌ **Result = MISMATCH**
+## 10. Summary of Verification
 
-![4-bit TCAM Row Mismatch Waveform](images/tcam_4x4/tcam_row_waveform2.bmp)
+| Block | Verified | Not yet verified |
+|---|---|---|
+| Gate-level model | Exact match, masked mismatch, unmasked mismatch | Exhaustive vectors |
+| 6T SRAM | Write 0, write 1, hold | Read stability, corners |
+| 16T cell | Stored 1, searched 1 | Other stored/search combinations, stored X |
+| 4-bit row | Exact match, one-bit mismatch | Stored X, masked mismatch, mismatch in each bit position |
+| Sense amplifier | IN above VREF | Reverse polarity, reset, full swing, sensitivity |
 
-*Figure 9. Transient simulation waveform of the 4-bit TCAM row for mismatch condition.*
+No comparison between the transistor-level row and the gate-level reference model has been carried out yet. Delay, power and corner simulations have not been performed.
 
-### 10.6 Complete Search Operation
+## 11. Future Work
 
-The complete simulation shows the write operation followed by the search operation for multiple cycles. In every match case, the Match Line remains HIGH, while in the mismatch case the Match Line discharges to LOW.
+1. Correct the sense amplifier (latch footer and output buffers) and complete its tests.
+2. Simulate all stored and search combinations of the 16T cell, including `X`.
+3. Apply identical vectors to the gate-level model and the transistor-level row, and compare the results.
+4. Complete the 4-word array with a write decoder, bit-line drivers and a priority encoder.
+5. Characterize search delay, power and process corners.
+6. Layout, design-rule and layout-versus-schematic checks, and post-layout extraction.
 
-![4-bit TCAM Row Complete Waveform](images/tcam_4x4/tcam_row_waveform3.bmp)
+## 12. Conclusion
 
-*Figure 10. Complete transient simulation waveform of the 4-bit TCAM row showing write and search operations.*
+A 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CMOS at 0.9 V. The 6T SRAM cell stores and holds data correctly. Two 6T cells and four compare transistors form a 16T ternary cell, and four such cells share a precharged match line. The gate-level reference model verifies the intended match function. The transistor-level verification is currently limited to a small set of cases, and the sense amplifier has known reset and output-swing limitations that must be corrected. The multi-word array, layout and post-layout characterization remain future work.
 
-## 11. Conclusion
+## 13. Repository Structure
 
-A complete 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CMOS.  
+```text
+4-Bit-NOR-Type-TCAM/
+│
+├── README.md
+│
+└── images/
+    ├── architecture.png
+    ├── sense_amp_architecture.png
+    │
+    ├── gate_level_model/
+    │   ├── nor_4bit_schematic.png
+    │   ├── nor-4_waveform.png
+    │   ├── tcam_4bit_reference_model.png
+    │   ├── tcam_exact_match.png
+    │   ├── tcam_dont-care.png
+    │   └── tcam_mismatch.png
+    │
+    ├── sram_6t/
+    │   ├── sram_6t_schematic.png
+    │   └── sram_6t_waveform.png
+    │
+    ├── tcam_1bit/
+    │   ├── tcam_1bit_schematic.png
+    │   └── tcam_1bit_waveform.png
+    │
+    ├── tcam_4bit_row/
+    │   ├── tcam_row_schematic.png
+    │   ├── tcam_row_waveform1.png
+    │   ├── tcam_row_waveform2.png
+    │   └── tcam_row_waveform3.png
+    │
+    └── sense_amplifier/
+        ├── sense_amp_schematic.png
+        └── sense_amp_waveform1.png
+```
 
-- The 6T SRAM cell provides reliable binary storage.  
-- Two 6T cells plus a four-transistor compare network realise the ternary (0/1/X) functionality.  
-- Four such cells operate on a shared, precharged match line.  
-- A latch-type sense amplifier converts the match-line voltage into a full-swing digital MATCH output.  
+## 14. Author
 
-All schematic blocks and corresponding transient waveforms are included in this repository. Layout, post-layout extraction, power/delay characterisation and multi-word array construction remain future work.
+**Pranjal Upadhyay**
+Roll Number: 523EC0012
+Department of Electronics and Communication Engineering
+Indian Institute of Information Technology, Design and Manufacturing, Kurnool
