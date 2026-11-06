@@ -115,7 +115,7 @@ Four mask-control units drive the NOR-4 combiner. The inputs are `D[3:0]`, `M[3:
 
 *Figure 5. Exact match.*
 
-![Don't Care](images/gate_level_model/tcam_dontcare.bmp)
+![Don't Care](images/gate_level_model/tcam_dont-care.bmp)
 
 *Figure 6. Masked (don't-care) mismatch.*
 
@@ -309,7 +309,7 @@ Only this single case (stored 1, searched 1) has been simulated for the cell.
 
 Four 16T cells are connected side by side. They share the match line `ML`, the word line `WL` and the precharge signal `PRE_B`. Each cell has its own write bit lines (`BL1_i`, `BLB1_i`, `BL2_i`, `BLB2_i`) and search lines (`SL_i`, `SLB_i`). `ML` is also connected to the input of the sense amplifier. The row produces a match only when all four stored bits match the search bits (or are masked).
 
-![4-bit TCAM Row Schematic](images/tcam__row_4x4/tcam_row_schematic.png)
+![4-bit TCAM Row Schematic](images/tcam_4x4/tcam_row_4x4.png)
 
 *Figure 12. Schematic of the 4-bit TCAM row with the sense amplifier.*
 
@@ -320,42 +320,31 @@ Four 16T cells are connected side by side. They share the match line `ML`, the w
 | PRE_B | 0.9 | 0 | 2 | 0.1 | 8 | 60 |
 | WL | 0 | 0.9 | 12 | 0.1 | 10 | 60 |
 
-The write bit-line pulses follow the `WL` timing and the search-line pulses follow the 1-bit cell test (TD = 28 ns, PW = 16 ns), with a 60 ns period. Bit-line and search-line levels for each stored value and search key are given in Section 7.2.
+Write bit-line pulses follow `WL` timing. Search-line pulses use TD = 28 ns, PW = 16 ns with a 60 ns period. Bit-line and search-line voltage levels for each stored value and search key are given in Section 7.2.
 
-### 9.3 Test Case 1: Exact Match
+### 9.3 Waveform Results
 
-Stored `D = 1010` and search `S = 1010`. All bits match, so `ML` stays high.
+The stored word is **D = 1010** (M = 0000). All three figures below are captured from a **single transient simulation** and display different signal groups of the same run.
 
-| Bit | Stored | BL1 / BLB1 / BL2 / BLB2 (write) | Search | SL / SLB |
-|:---:|:---:|:---:|:---:|:---:|
-| 3 | 1 | 0 / 0.9 / 0.9 / 0 V | 1 | 0.9 / 0 V |
-| 2 | 0 | 0.9 / 0 / 0 / 0.9 V | 0 | 0 / 0.9 V |
-| 1 | 1 | 0 / 0.9 / 0.9 / 0 V | 1 | 0.9 / 0 V |
-| 0 | 0 | 0.9 / 0 / 0 / 0.9 V | 0 | 0 / 0.9 V |
+**Write Phase (Figure 13)**  
+Bit-line signals for all four cells. `BL1_x` / `BLB1_x` drive $Q_1$, `BL2_x` / `BLB2_x` drive $Q_2$. The periodic write pulses confirm D = 1010 is stored across the four cells — cells 0 and 2 hold 0, cells 1 and 3 hold 1.
 
-Result: match.
+![Write Bit-Line Waveforms](images/tcam_4x4/tcam_row_waveform1.bmp)
+*Figure 13. Write-phase bit-line waveforms (BL1, BLB1, BL2, BLB2 for Cell 0–3).*
 
-![Row Match Waveform](images/tcam__4x4/tcam_row_waveform1.bmp)
+**Search and Match-Line Signals (Figure 14)**  
+Search lines (`SL_x`, `SLB_x`), match-line nodes (`ML2_0`–`ML2_3`), sense-enable (`SA_EN`) and reference voltage (`VRef`). The search-line activity drives the comparison during evaluation windows; `SA_EN` pulses after the search lines settle to trigger the sense amplifier.
 
-*Figure 13. Match condition.*
+![Search and ML Waveforms](images/tcam_4x4/tcam_row_waveform2.bmp)
+*Figure 14. Search-line, match-line, sense-enable and reference-voltage waveforms.*
 
-### 9.4 Test Case 2: Mismatch
+**Complete Operation and Match Output (Figure 15)**  
+Control signals (`WL`, `PRE_B`) together with sense-amplifier outputs (`MATCH`, `MATCH_B`) across the full simulation window. `MATCH` stays at logic high during match evaluations and dips low when a mismatching search word is applied. `MATCH_B` is its complement.
 
-Stored `D = 1010` and search `S = 1000`. Bit 1 differs (stored 1, searched 0), so Stack B of cell 1 conducts and `ML` discharges.
+![Complete Operation Waveform](images/tcam_4x4/tcam_row_waveform3.bmp)
+*Figure 15. Full 4-bit row operation: write, precharge/evaluate phases and the MATCH / MATCH_B output.*
 
-Result: mismatch.
-
-![Row Mismatch Waveform](images/tcam__4x4/tcam_row_waveform2.bmp)
-
-*Figure 14. Mismatch condition.*
-
-### 9.5 Complete Search Operation
-
-The complete simulation shows the write operation followed by the search operation over multiple cycles. `ML` stays high for the match case and discharges for the mismatch case.
-
-![Row Complete Waveform](images/tcam_4x4/tcam_row_waveform3.bmp)
-
-*Figure 15. Write and search operations of the 4-bit row.*
+Recommended modification (not yet implemented): connect the sources of N4 and N5 to a common node and add an NMOS footer (about 1.2 µm / 45 nm, gate `SA_EN`) between this node and ground, so that the latch is disabled during reset, and add an inverter buffer on each output to restore full swing. The tests above should then be repeated.
 
 ## 10. Summary of Verification
 
