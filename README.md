@@ -409,9 +409,24 @@ A 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CM
         └── sense_amp_waveform1.bmp
 ```
 
-## 14. Author
+---
 
-**Pranjal Upadhyay**
-Roll Number: 523EC0012
-Department of Electronics and Communication Engineering
-Indian Institute of Information Technology, Design and Manufacturing, Kurnool
+<div align="center">
+
+### Author
+
+**Pranjal Upadhyay**  
+Roll No.: 523EC0012  
+
+Department of Electronics and Communication Engineering  
+Integrated Bachelor and Master of Technology  
+
+**Indian Institute of Information Technology Design and Manufacturing, Kurnool**
+
+---
+
+### Star this repository if you found it helpful!
+
+---
+
+© 2025 Pranjal Upadhyay — All Rights Reserved
