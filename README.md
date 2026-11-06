@@ -18,6 +18,7 @@ The design is developed hierarchically, progressing from a gate-level reference 
 
 ### Repository Structure
 
+```text
 4-Bit-TCAM/
 │
 ├── README.md
@@ -52,6 +53,7 @@ The design is developed hierarchically, progressing from a gate-level reference 
         ├── tcam_row_waveform1.bmp
         ├── tcam_row_waveform2.bmp
         └── tcam_row_waveform3.bmp
+```
 
 ## 2. Technology and Design Tools
 
