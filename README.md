@@ -97,6 +97,32 @@ The NOR-4 block was simulated with four inputs `A`, `B`, `C`, `D` forming a bina
 
 *Figure 3. Transient waveform of the NOR-4 combiner.*
 
+### 5.3 NOR-2 Physical Layout
+
+The physical layout of the 2-input NOR gate was designed in Cadence Virtuoso using the GPDK045 technology. It consists of two series-connected PMOS transistors forming the pull-up network and two parallel-connected NMOS transistors forming the pull-down network.
+
+![NOR-2 Physical Layout](images/gate_level_model/nor2_layout.png)
+
+*Figure 4. Physical layout of the 2-input NOR gate.*
+
+The NOR-4 word combiner can also be constructed using three NOR-2 gates. The first two gates process the four mismatch signals in pairs, generating intermediate outputs. The third gate combines these outputs to produce the final `MATCH` signal.
+
+The corresponding Boolean expressions are:
+
+$$
+X_0 = \overline{MM_0 + MM_1}
+$$
+
+$$
+X_1 = \overline{MM_2 + MM_3}
+$$
+
+$$
+MATCH = \overline{X_0 + X_1}
+$$
+
+This arrangement implements the required four-input NOR function using three NOR-2 gates as building blocks.
+
 ### 5.3 Top-Level 4-Bit Gate-Level TCAM
 
 Four mask-control units drive the NOR-4 combiner. The inputs are `D[3:0]`, `M[3:0]` and `S[3:0]`, and the output is `MATCH`.
@@ -162,11 +188,19 @@ The pull-down to access ratio is 360/250 = 1.44, and the pull-up to access ratio
 
 ### 6.4 Results
 
-`Q` changes only when `WL` is high and follows `BL`. It holds its value while `WL` is low, including when `BL` and `BLB` change. `Q` and `QB` are complementary and swing between about 0 V and about 0.9 V. Write 0, write 1 and hold are all demonstrated.
+The transient simulation verifies the correct operation of the 6T SRAM cell. When `WL` is high, the cell is selected and `Q` follows the input data on `BL`. When `WL` is low, the cell retains its previously stored value, even when `BL` and `BLB` change. The outputs `Q` and `QB` remain complementary, switching between approximately 0 V and 0.9 V. The simulation successfully demonstrates all three operations: write 0, write 1, and hold.
 
 ![6T SRAM Waveform](images/6t_sram/sram_6t_waveform.bmp)
 
 *Figure 9. Transient waveform of the 6T SRAM cell.*
+
+### 6.5 Layout
+
+The physical layout of the 6T SRAM cell was implemented in Cadence Virtuoso using the GPDK045 technology. The layout shows the placement of the six MOS transistors and the interconnections required to form the cross-coupled inverter pair and access-transistor network.
+
+![6T SRAM Layout](images/6t_sram/layout.png)
+
+*Figure 10. Physical layout of the 6T SRAM cell.*
 
 ## 7. Latch-Type Match-Line Sense Amplifier
 
@@ -358,20 +392,11 @@ Recommended modification (not yet implemented): connect the sources of N4 and N5
 
 No comparison between the transistor-level row and the gate-level reference model has been carried out yet. Delay, power and corner simulations have not been performed.
 
-## 11. Future Work
-
-1. Correct the sense amplifier (latch footer and output buffers) and complete its tests.
-2. Simulate all stored and search combinations of the 16T cell, including `X`.
-3. Apply identical vectors to the gate-level model and the transistor-level row, and compare the results.
-4. Complete the 4-word array with a write decoder, bit-line drivers and a priority encoder.
-5. Characterize search delay, power and process corners.
-6. Layout, design-rule and layout-versus-schematic checks, and post-layout extraction.
-
-## 12. Conclusion
+## 11. Conclusion
 
 A 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CMOS at 0.9 V. The 6T SRAM cell stores and holds data correctly. Two 6T cells and four compare transistors form a 16T ternary cell, and four such cells share a precharged match line. The gate-level reference model verifies the intended match function. The transistor-level verification is currently limited to a small set of cases, and the sense amplifier has known reset and output-swing limitations that must be corrected. The multi-word array, layout and post-layout characterization remain future work.
 
-## 13. Repository Structure
+## 12. Repository Structure
 
 ```text
 4-Bit-NOR-Type-TCAM/
@@ -389,10 +414,12 @@ A 4-bit NOR-type TCAM word has been designed at the transistor level in 45 nm CM
     │   ├── tcam_exact_match.bmp
     │   ├── tcam_dont-care.bmp
     │   └── tcam_mismatch.bmp
+    |   └── nor2_layout.png
     │
     ├── sram_6t/
     │   ├── sram_6t_schematic.png
     │   └── sram_6t_waveform.bmp
+    |   └── layout.png
     │
     ├── tcam_1bit/
     │   ├── tcam_1bit_schematic.png
