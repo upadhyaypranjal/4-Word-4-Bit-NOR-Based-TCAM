@@ -343,7 +343,7 @@ Only this single case (stored 1, searched 1) has been simulated for the cell.
 
 Four 16T cells are connected side by side. They share the match line `ML`, the word line `WL` and the precharge signal `PRE_B`. Each cell has its own write bit lines (`BL1_i`, `BLB1_i`, `BL2_i`, `BLB2_i`) and search lines (`SL_i`, `SLB_i`). `ML` is also connected to the input of the sense amplifier. The row produces a match only when all four stored bits match the search bits (or are masked).
 
-![4-bit TCAM Row Schematic](images/tcam_4x4/tcam_row_4x4.png)
+<img src="images/tcam_4x4/tcam_row_4x4.png" alt="4-bit TCAM Row Schematic" width="1000" height="1000">
 
 *Figure 12. Schematic of the 4-bit TCAM row with the sense amplifier.*
 
