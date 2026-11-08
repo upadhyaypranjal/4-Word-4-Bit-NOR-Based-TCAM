@@ -101,7 +101,7 @@ The NOR-4 block was simulated with four inputs `A`, `B`, `C`, `D` forming a bina
 
 The physical layout of the 2-input NOR gate was designed in Cadence Virtuoso using the GPDK045 technology. It consists of two series-connected PMOS transistors forming the pull-up network and two parallel-connected NMOS transistors forming the pull-down network.
 
-![NOR-2 Physical Layout](images/gate_level_model/nor2_layout.png)
+<img src="images/gate_level_model/nor2_layout.png" alt="NOR-2 Physical Layout" width="750">
 
 *Figure 4. Physical layout of the 2-input NOR gate.*
 
