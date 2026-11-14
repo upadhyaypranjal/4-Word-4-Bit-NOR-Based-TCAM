@@ -668,14 +668,10 @@ Preliminary timing, average-power, power–delay and delay-based energy–delay 
 
 ### Author
 
-**Pranjal Upadhyay**
-
-Roll No.: 523EC0012
-
-Department of Electronics and Communication Engineering
-
-Integrated Bachelor and Master of Technology
-
+**Pranjal Upadhyay**  
+Roll No.: 523EC0012  
+Department of Electronics and Communication Engineering  
+Integrated Bachelor and Master of Technology  
 **Indian Institute of Information Technology Design and Manufacturing, Kurnool**
 
 ---
